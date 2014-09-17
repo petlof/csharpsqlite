@@ -2475,7 +2475,13 @@ shmpage_out:
         zRandom.Append( (char)zChars[(int)( iRandom % ( zChars.Length - 1 ) )] );
       }
       //  zBuf[j] = 0;
-      zBuf.Append( Path.GetTempPath() + SQLITE_TEMP_FILE_PREFIX + zRandom.ToString() );
+#if SQLITE_WINRT
+      zBuf.Append( Path.Combine(ApplicationData.Current.LocalFolder.Path, SQLITE_TEMP_FILE_PREFIX + zRandom.ToString()) );
+#elif SQLITE_SILVERLIGHT
+      zBuf.Append(Path.Combine(sqlite3_temp_directory, SQLITE_TEMP_FILE_PREFIX + zRandom.ToString()));
+#else
+      zBuf.Append(Path.GetTempPath() + SQLITE_TEMP_FILE_PREFIX + zRandom.ToString());
+#endif
       //for(i=sqlite3Strlen30(zTempPath); i>0 && zTempPath[i-1]=='\\'; i--){}
       //zTempPath[i] = 0;
       //sqlite3_snprintf(nBuf-17, zBuf,
@@ -2961,19 +2967,34 @@ pFile.zDeleteOnClose = zConverted;
         //    attr = INVALID_FILE_ATTRIBUTES;
         //  }
         //}
-#if WINDOWS_PHONE || WINDOWS_MOBILE || SQLITE_SILVERLIGHT
+#if WINDOWS_MOBILE
         if (new DirectoryInfo(zFilename).Exists)
+#elif SQLITE_WINRT
+        if (HelperMethods.DirectoryExists(zFilename))
+#elif WINDOWS_PHONE || SQLITE_SILVERLIGHT
+        if (System.IO.IsolatedStorage.IsolatedStorageFile.GetUserStoreForApplication().DirectoryExists(zFilename))
 #else
-        attr = File.GetAttributes( zFilename );// GetFileAttributesW( (WCHAR)zConverted );
-        if ( attr == FileAttributes.Directory )
+        if (Directory.Exists( zFilename ))
 #endif
         {
           try
           {
-            string name = Path.Combine( Path.GetTempPath(), Path.GetTempFileName() );
+            var tempName = new StringBuilder();
+            getTempname(MAX_PATH + 1, tempName);
+            string name = Path.Combine(zFilename, Path.GetFileNameWithoutExtension(tempName.ToString()));
+#if SQLITE_WINRT
+            Task<StorageFolder> fileTask = StorageFolder.GetFolderFromPathAsync(path).AsTask<StorageFolder>();
+            fileTask.Wait();
+            attr = fileTask.Attributes;
+#elif WINDOWS_PHONE || SQLITE_SILVERLIGHT
+            var stream = IsolatedStorageFile.GetUserStoreForApplication().CreateFile(name);
+            stream.Close();
+            IsolatedStorageFile.GetUserStoreForApplication().DeleteFile(name);
+#else
             FileStream fs = File.Create( name );
             fs.Close();
             File.Delete( name );
+#endif
             attr = FileAttributes.Normal;
           }
           catch ( IOException e )
@@ -3002,10 +3023,18 @@ pFile.zDeleteOnClose = zConverted;
       {
         case SQLITE_ACCESS_READ:
         case SQLITE_ACCESS_EXISTS:
-          rc = attr != 0 ? 1 : 0;// != INVALID_FILE_ATTRIBUTES;
+#if SQLITE_WINRT
+            rc = attr == FileAttributes.Normal ? 1 : 0;// != INVALID_FILE_ATTRIBUTES;
+#else
+            rc = attr != 0 ? 1 : 0;// != INVALID_FILE_ATTRIBUTES;
+#endif
           break;
         case SQLITE_ACCESS_READWRITE:
+#if SQLITE_WINRT
+            rc = attr != FileAttributes.Normal ? 0 : (int)( attr & FileAttributes.ReadOnly ) != 0 ? 0 : 1; //FILE_ATTRIBUTE_READONLY ) == 0;
+#else
           rc = attr == 0 ? 0 : (int)( attr & FileAttributes.ReadOnly ) != 0 ? 0 : 1; //FILE_ATTRIBUTE_READONLY ) == 0;
+#endif
           break;
         default:
           Debug.Assert(false, "Invalid flags argument" );
