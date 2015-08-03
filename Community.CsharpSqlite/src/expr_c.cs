@@ -2808,7 +2808,7 @@ static int usedAsColumnCache( Parse pParse, int iFrom, int iTo ){return 0;}
             Debug.Assert( !ExprHasProperty( pExpr, EP_IntValue ) );
             Debug.Assert( pExpr.u.zToken[0] == 'x' || pExpr.u.zToken[0] == 'X' );
             Debug.Assert( pExpr.u.zToken[1] == '\'' );
-            z = pExpr.u.zToken.Substring( 2 );
+            z = pExpr.u.zToken.Substring( 2 );  
             n = sqlite3Strlen30( z ) - 1;
             Debug.Assert( z[n] == '\'' );
             zBlob = sqlite3HexToBlob( sqlite3VdbeDb( v ), z, n );
